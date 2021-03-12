@@ -1,0 +1,51 @@
+import groovy.json.JsonSlurper
+
+def getDockerImages() {
+    final REPO_NAME = "store"
+    final APP_NAME = "store"
+    final TAGS_URL = "https://gcr.io/v2/google-containers/cadvisor/tags/list"
+    
+    def auth_token = "gcloud auth print-access-token".execute().text.replaceAll("\r\n", "")
+    def url = "curl -s -u _token:${auth_token} ${TAGS_URL}"
+    def gcr_tags_json = url.execute().text.replaceAll("\r\n", "")
+    
+
+    def slurper = new JsonSlurper()
+    def json = slurper.parseText(gcr_tags_json)
+    def tags = new ArrayList()
+    if (json.tags == null || json.tags.size == 0)
+      tags.add("unable to fetch tags for ${APP_NAME}")
+    else
+      tags.addAll(json.tags)
+    return tags.join('\n')
+}
+
+pipeline {
+    agent any
+    stages {
+        stage("Gather Deployment Parameters") {
+            steps {
+                timeout(time: 30, unit: 'SECONDS') {
+                    script {
+                        // Show the select input modal
+                       def INPUT_PARAMS = input message: 'Please Provide Parameters', ok: 'Next',
+                            parameters: [
+                                string(name: 'RESPONSAVEL', defaultValue: 'Mr Jenkins', description: 'Digite o nome do responsavel pelo deploy.'),
+                                choice(name: 'IMAGE_TAG', choices: getDockerImages(), description: 'Available Docker Images')]
+                        env.RESPONSAVEL = INPUT_PARAMS.RESPONSAVEL
+                        env.IMAGE_TAG = INPUT_PARAMS.IMAGE_TAG
+                    }
+                }
+            }
+        }
+        stage("Use Deployment Parameters") {
+         steps {
+                script {
+                    echo "All parameters have been set as Environment Variables"
+                    echo "Responsible to deploy: ${env.RESPONSAVEL}"
+                    echo "Selected Tag: ${env.IMAGE_TAG}"
+                }
+         }
+        }
+    }
+}
